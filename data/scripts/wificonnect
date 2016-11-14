@@ -1,0 +1,203 @@
+#! /bin/bash
+
+# Constants
+PATH_NETWORK_INTERFACES="/etc/network/interfaces"
+PATH_HOSTAPD_CONF="/etc/hostapd/hostapd.conf"
+
+DEFAULT_SSID="DEFAULT_SSID"
+DEFAULT_PASS="DEFAULT_PASSWORD"
+
+# Usage info
+show_help() {
+	echo -e "\e[1mNAME\e[0m"
+	echo -e "\twificonnect\n"
+	echo -e "\e[1mSYNOPSIS\e[0m"
+	echo -e "\t\e[1m${0##*/}\e[0m [-ssid \e[4mSSID\e[0m] [-pass \e[4mPASSWORD\e[0m]\n"
+	echo -e "\e[1mDESCRIPTION\e[0m"
+	echo -e "\tIt connects to the wifi network with ssid SSID and password PASSWORD while keeping up the AP mode\n"
+	echo -e "\t\e[1m-h, --help\e[0m"
+	echo -e "\t\tdisplays this help and exits\n"
+	echo -e "\t\e[1m-s, -ssid\e[0m \e[4mSSID\e[0m"
+	echo -e "\t\tuses SSID as the ssid of the network to connect\n"
+	echo -e "\t\e[1m-p, -pass, --password\e[0m \e[4mPASSWORD\e[0m"
+	echo -e "\t\tuses PASSWORD as the password for connecting to the network\n"
+}
+
+# Initialize our own variables:
+WPA_SSID=
+WPA_PASS=
+
+# Clearing display
+#clear
+
+# Handle command-line arguments
+while :; do
+    case $1 in
+        -h|-\?|--help)   # Call a "show_help" function to display a synopsis, then exit.
+            show_help
+            exit
+            ;;
+        -s|--ssid)       # Takes an option argument, ensuring it has been specified.
+            if [ -n "$2" ]; then
+                WPA_SSID=$2
+                shift
+            else
+                printf 'ERROR: "--ssid" requires a non-empty option argument.\n' >&2
+                exit 1
+            fi
+            ;;
+        -p|--pass|--password)       # Takes an option argument, ensuring it has been specified.
+            if [ -n "$2" ]; then
+                WPA_PASS=$2
+                shift
+            else
+                printf 'ERROR: "--pass" requires a non-empty option argument.\n' >&2
+                exit 1
+            fi
+            ;;
+        --)              # End of all options.
+            shift
+            break
+            ;;
+        -?*)
+            printf 'WARN: Unknown option (ignored): %s\n' "$1" >&2
+            ;;
+        *)               # Default case: If no more options then break out of the loop.
+            break
+    esac
+
+    shift
+done
+
+# Check if script is running as root
+if [ $(id -u) != 0 ]; then
+	echo 1>&2 "Error: Please run the script as root (sudo $0 [-ssid SSID] [-pass PASSWORD])"
+	echo 1>&2 "exited with code 1"
+	exit 1;
+fi
+
+# Welcome message
+echo "*******************************************************************************"
+echo "This script will connect to the wifi network with ssid SSID"
+echo "and password PASSWORD while keeping up the AP mode"
+echo ""
+echo "Created by Chema Alfaya Montero <chemaalfaya@gmail.com>"
+echo "*******************************************************************************"
+echo ""
+
+
+if [ ! "$WPA_SSID" ]
+then
+	echo -e "List of networks in range:\n"
+	iwlist wlan0 scanning | grep 'ESSID' | awk -F: '{print $2}'
+	echo ""
+	echo -n "Enter the SSID of the network you want to connect to and press [ENTER]: "
+	read WPA_SSID
+	if [[ -z "${WPA_SSID// }" ]]
+	then
+		WPA_SSID="$DEFAULT_SSID"
+		WPA_PASS="$DEFAULT_PASS"
+	fi
+fi
+
+if [ ! "$WPA_PASS" ]
+then
+	echo -n "Enter the PASSWORD for the network you want to connect to and press [ENTER]: "
+	read WPA_PASS
+	if [[ -z "${WPA_PASS// }" ]]
+	then
+		WPA_PASS="$DEFAULT_PASS"
+	fi
+fi
+
+# Check for network SSID availability
+echo "+ Checking for $WPA_SSID availability"
+exists=$(iwlist wlan0 scanning essid "$WPA_SSID" | grep "$WPA_SSID")
+if [[ $exists ]]
+then
+	echo "$WPA_SSID found in range" | sed 's/^/    /'
+else
+	echo 1>&2 "Error: Unable to find $WPA_SSID in range"
+	echo 1>&2 "exited with code 1"
+	exit 1;
+fi
+
+
+# Get channel
+echo "+ Getting $WPA_SSID channel"
+channel=$(iwlist wlan0 scanning | egrep 'ESSID|Channel:' | sed 'N;s/\n/ /' | grep "$WPA_SSID" | perl -n -e '/Channel:(\d+)/ && print $1')
+if [[ $channel ]]
+then
+	echo "$WPA_SSID has channel $channel" | sed 's/^/    /'
+else
+	echo 1>&2 "Error: Unable to get $WPA_SSID channel"
+	echo 1>&2 "exited with code 2"
+	exit 2;
+fi
+
+# Generate wpa-psk for wpa-ssid $WPA_SSID
+echo "+ Generating wpa-psk for wpa-ssid $WPA_SSID"
+command="wpa_passphrase '"$WPA_SSID"' '"$WPA_PASS"'"
+eval tmp=\$\($command\)
+regex=".*\spsk=([A-Za-z0-9]+)"
+if [[ $tmp =~ $regex ]]
+then
+	WPA_PSK="${BASH_REMATCH[1]}"
+	echo "wpa-ssid=$WPA_SSID" | sed 's/^/    /'
+	echo "wpa-psk=$WPA_PSK" | sed 's/^/    /'
+else
+	echo 1>&2 "Error: Unable to generate wpa-psk for wpa-ssid $WPA_SSID"
+	echo 1>&2 "exited with code 3"
+	exit 3;
+fi
+
+
+# Replace wpa-ssid and wpa-psk on /etc/network/interfaces
+echo "+ Replacing wpa-ssid and wpa-psk on /etc/network/interfaces"
+wpa_ssid_line="$(awk '/wpa-ssid/{ print NR; exit }' $PATH_NETWORK_INTERFACES)"
+command="sed -i '"$wpa_ssid_line"s/.*/wpa-ssid "$WPA_SSID"/' "$PATH_NETWORK_INTERFACES
+eval $command
+
+wpa_psk_line="$(awk '/wpa-psk/{ print NR; exit }' $PATH_NETWORK_INTERFACES)"
+command="sed -i '"$wpa_psk_line"s/.*/wpa-psk "$WPA_PSK"/' "$PATH_NETWORK_INTERFACES
+eval $command
+
+
+# Replace channel on /etc/hostapd/hostapd.conf
+echo "+ Replacing channel on /etc/hostapd/hostapd.conf"
+channel_line="$(awk '/channel/{ print NR; exit }' $PATH_HOSTAPD_CONF)"
+command="sed -i '"$channel_line"s/.*/channel="$channel"/' "$PATH_HOSTAPD_CONF
+eval $command
+sleep 5
+
+
+
+
+# Disconnect wlan0
+echo "+ Disconnecting wlan0"
+ifdown wlan0 2>&1 | sed 's/^/    /'
+
+
+# Disconnect hostapd
+echo "+ Disconnecting hostapd"
+pid="$(pgrep hostapd)"
+kill -9 $pid 2>&1 | sed 's/^/    /'
+ifdown uap0 2>&1 | sed 's/^/    /'
+#sleep 3
+sleep 5
+
+#------------------------------------------------
+
+# Restart hostapd
+echo "+ Restarting hostapd"
+hostapdstart 2>&1 | sed 's/^/    /' &
+#sleep 3
+sleep 5
+
+
+# Connect wlan0
+echo "+ Connecting wlan0"
+ifup wlan0 2>&1 | sed 's/^/    /'
+
+# All done
+echo "All done."
