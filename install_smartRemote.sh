@@ -6,6 +6,9 @@ PATH_DNSMASQ="/etc/dnsmasq.conf"
 PATH_HOSTAPD_CONF="/etc/hostapd/hostapd.conf"
 PATH_RC_LOCAL="/etc/rc.local"
 PATH_CRDA="/etc/default/crda"
+PATH_ETC_MODULES="/etc/modules"
+PATH_BOOT_CONFIG="/boot/config.txt"
+PATH_HARDWARE_CONF="/etc/lirc/hardware.conf"
 
 DEFAULT_SSID="DEFAULT_SSID"
 DEFAULT_PASS="DEFAULT_PASSWORD"
@@ -38,6 +41,65 @@ if [ -z "$MY_PATH" ] ; then
   # to the script (e.g. permissions re-evaled after suid)
   exit 1  # fail
 fi
+
+# Update and upgrade
+echo "+ Updating and upgrading the system"
+apt-get -y update | sed 's/^/    /'
+##apt-get -y upgrade | sed 's/^/    /'
+
+
+
+
+
+# Install lirc
+echo "+ Installing lirc"
+apt-get -y install lirc | sed 's/^/    /'
+
+# Configure lirc
+echo "+ Configuring lirc"
+
+#	 Configure the driver
+cp "$MY_PATH/data/files/etc-modules" "$PATH_ETC_MODULES"
+chown root:root "$PATH_ETC_MODULES"
+chmod 644 "$PATH_ETC_MODULES"
+
+#	 Replace or add system configuration parameters on /boot/config.txt
+dtoverlay_line="$(awk '/dtoverlay/{ print NR; exit }' $PATH_BOOT_CONFIG)"
+if [ "$dtoverlay_line" ]
+then
+	command="sed -i '"$dtoverlay_line"d' "$PATH_BOOT_CONFIG
+	eval $command
+fi
+gpio_in_pin_line="$(awk '/gpio_in_pin/{ print NR; exit }' $PATH_BOOT_CONFIG)"
+if [ "$gpio_in_pin_line" ]
+then
+	command="sed -i '"$gpio_in_pin_line"d' "$PATH_BOOT_CONFIG
+	eval $command
+fi
+gpio_out_pin_line="$(awk '/gpio_out_pin/{ print NR; exit }' $PATH_BOOT_CONFIG)"
+if [ "$gpio_out_pin_line" ]
+then
+	command="sed -i '"$gpio_out_pin_line"d' "$PATH_BOOT_CONFIG
+	eval $command
+fi
+
+if [ "$dtoverlay_line" ]
+then
+	dtoverlay_line=$(( $dtoverlay_line - 1))
+	sed -i ''$dtoverlay_line'a \dtoverlay=lirc-rpi\ndtparam=gpio_in_pin=23\ndtparam=gpio_out_pin=22' $PATH_BOOT_CONFIG
+else
+	echo "dollar"
+	sed -i '$a \dtoverlay=lirc-rpi\ndtparam=gpio_in_pin=23\ndtparam=gpio_out_pin=22' $PATH_BOOT_CONFIG
+fi
+
+#	 Set the HW config file
+cp "$MY_PATH/data/files/hardware.conf" "$PATH_HARDWARE_CONF"
+chown root:root "$PATH_HARDWARE_CONF"
+chmod 644 "$PATH_HARDWARE_CONF"
+
+
+
+
 
 # Install hostapd and dnsmasq
 echo "+ Installing hostapd and dnsmasq"
