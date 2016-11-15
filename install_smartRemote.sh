@@ -15,7 +15,7 @@ DEFAULT_PASS="DEFAULT_PASSWORD"
 DEFAULT_CRDA="JP"
 
 # Clearing display
-#clear
+clear
 
 # Check if script is running as root
 if [ $(id -u) != 0 ]; then
@@ -96,6 +96,23 @@ fi
 cp "$MY_PATH/data/files/hardware.conf" "$PATH_HARDWARE_CONF"
 chown root:root "$PATH_HARDWARE_CONF"
 chmod 644 "$PATH_HARDWARE_CONF"
+
+
+
+
+
+# Install node.js
+echo "+ Installing node.js"
+node_last_version=$(wget https://nodejs.org/dist/latest/ -q -O - | grep `uname -m`'.tar.gz' | perl -n -e '/href=\"(.+).tar.gz\".*/ && print "$1"')
+rm "$MY_PATH/$node_last_version".tar.gz
+rm -rf "$MY_PATH/$node_last_version"
+wget https://nodejs.org/dist/latest/"$node_last_version".tar.gz
+tar -xvf "$node_last_version".tar.gz
+cd "$MY_PATH/$node_last_version"
+cp -R * /usr/local/
+cd "$MY_PATH"
+rm "$MY_PATH/$node_last_version".tar.gz
+rm -rf "$MY_PATH/$node_last_version"
 
 
 
