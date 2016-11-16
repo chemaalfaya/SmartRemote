@@ -238,4 +238,4 @@ do
 done
 
 # Rebooting system
-reboot
+echo "You must reboot your system for changes to take effect (sudo reboot)"
