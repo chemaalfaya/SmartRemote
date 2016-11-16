@@ -122,7 +122,7 @@ rm -rf "$MY_PATH/$node_last_version"
 echo "+ Installing ws-lirc"
 git clone https://github.com/chemaalfaya/ws-lirc.git
 cd "$MY_PATH/ws-lirc"
-npm install
+npm install --unsafe-perm
 cd "$MY_PATH"
 
 
