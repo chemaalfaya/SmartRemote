@@ -42,10 +42,10 @@ if [ -z "$MY_PATH" ] ; then
   exit 1  # fail
 fi
 
-# Update and upgrade
-echo "+ Updating and upgrading the system"
+# Update the system
+echo "+ Updating the system"
 apt-get -y update | sed 's/^/    /'
-##apt-get -y upgrade | sed 's/^/    /'
+#apt-get -y upgrade | sed 's/^/    /'
 
 
 
@@ -113,6 +113,17 @@ cp -R * /usr/local/
 cd "$MY_PATH"
 rm "$MY_PATH/$node_last_version".tar.gz
 rm -rf "$MY_PATH/$node_last_version"
+
+
+
+
+
+# Install ws-lirc
+echo "+ Installing ws-lirc"
+git clone https://github.com/chemaalfaya/ws-lirc.git
+cd "$MY_PATH/ws-lirc"
+npm install
+cd "$MY_PATH"
 
 
 
@@ -225,3 +236,6 @@ do
 		*) echo "Please enter only 'Y' or 'n'"
 	esac
 done
+
+# Rebooting system
+reboot
